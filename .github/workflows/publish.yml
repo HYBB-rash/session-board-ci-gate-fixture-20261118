@@ -1,0 +1,33 @@
+name: Candidate channel fixture
+on:
+  push:
+    branches: [main]
+permissions: {}
+jobs:
+  linux:
+    name: Publish Linux fixture
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Verify and publish synthetic asset
+        run: |
+          printf 'synthetic data for %s\n' "$GITHUB_SHA" > fixture.txt
+          sha256sum fixture.txt > fixture.txt.sha256
+          sha256sum -c fixture.txt.sha256
+          tag="fixture-linux-$GITHUB_SHA"
+          gh release create "$tag" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft fixture.txt fixture.txt.sha256
+          gh release edit "$tag" -R "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.immutable' | grep -x true
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/candidate/linux" --silent; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/candidate/linux" -f sha="$GITHUB_SHA" -F force=false --silent
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref=refs/heads/candidate/linux -f sha="$GITHUB_SHA" --silent
+          fi
+  mac:
+    name: Hold Mac publication fixture
+    runs-on: macos-26
+    steps:
+      - run: sleep 300
